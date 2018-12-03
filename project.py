@@ -5,7 +5,7 @@ from pyo import *
 
 root = tk.Tk()
 
-img = Image.open(r'nysunset.jpg')
+img = Image.open(r'pics/nysunset.jpg')
 imgTk = ImageTk.PhotoImage(img)
 
 def motion(event):
