@@ -3,11 +3,49 @@ from tkMessageBox import *
 import tkFileDialog
 from PIL import Image, ImageTk
 import OSC
+import pickle
+import os
 
-#FREQ_RANGE = (0, )
-DEGREE_RANGE = (0, 7)
-DURATION_RANGE = (0.2, 0.8)
-AMP_RANGE = (0.4, 3)
+INSTRUMENTS = ["piano", "violin", "guitar", "bass"]
+SETTINGS_FILENAME = 'settings.pkl'
+
+# helper func
+def entry_set_text(entry, text):
+    entry.delete(0,END)
+    entry.insert(0,text)
+
+class ConfigFile():
+	def __init__(self):
+		# defaults
+		self.instruments = ["piano"]
+		self.amp_range = (0.4, 3)
+		self.dur_range = (0.2, 0.8)
+		self.deg_range = (0, 7)
+		self.dur_neigh_scale = 5
+
+	def save(self):
+		print "saving configuration:"
+		print self
+		with open(SETTINGS_FILENAME,'wb') as outfile:
+			pickle.dump(self, outfile)
+
+	def set_values(self, instruments, amp_min,amp_max,deg_min,deg_max,dur_min,dur_max,dur_neigh_scale):
+		self.instruments = instruments
+		self.amp_range = (amp_min, amp_max)
+		self.dur_range = (dur_min, dur_max)
+		self.deg_range = (deg_min, deg_max)
+		self.dur_neigh_scale = dur_neigh_scale
+
+	def __repr__(self):
+		return "instruments="+str(self.instruments)+"\namp_range="+str(self.amp_range)+"\ndur_range="+str(self.dur_range)+"\ndeg_range="+str(self.deg_range)+"\ndur_neigh_scale="+str(self.dur_neigh_scale)
+
+	@classmethod
+	def load(cls):
+		if os.path.exists(SETTINGS_FILENAME):
+			with open(SETTINGS_FILENAME,'rb') as infile:
+				return pickle.load(infile)
+		
+		return ConfigFile()
 
 class App(Tk):
 	def __init__(self):
@@ -22,7 +60,6 @@ class App(Tk):
 		y = (hs/2) - (h/2)
 		self.geometry('%dx%d+%d+%d' % (w,h,x, y))
 		
-		#self.geometry("500x400")
 		self.iconbitmap(default='icon.ico')
 		self.resizable(width=False, height=False)
 		self.img = None
@@ -39,8 +76,13 @@ class App(Tk):
 		helpmenu.add_command(label="About", command=self.about)
 		menubar.add_cascade(label="Help", menu=helpmenu)
 		self.config(menu=menubar)
+
+		self.config_file = ConfigFile.load()
+		print "config file was loaded:"
+		print self.config_file
 	
 	def load_image(self):
+		# TODO: load multiple images
 		imagePath = tkFileDialog.askopenfilename(initialdir = ".",title = "Select image file",filetypes = (("jpeg files","*.jpg"),("png","*.png")))
 		self.img = Image.open(imagePath)
 		self.imgTk = ImageTk.PhotoImage(self.img)
@@ -57,7 +99,7 @@ class App(Tk):
 		self.makesound(*rgb)
 
 	def get_value(self, range, num):
-		return range[0] + ((num / 255.0) * (range[1]-range[0]))
+		return float(range[0]) + ((num / 255.0) * (float(range[1])-float(range[0])))
 		
 	def settings(self):
 		settingsWindow = Toplevel(self)
@@ -75,16 +117,71 @@ class App(Tk):
 		
 		Label(settingsWindow, text="Instruments:").grid(row=0, column=0,padx=20, pady=20)
 		listbox = Listbox(settingsWindow, selectmode=MULTIPLE)
-		listbox.pack()
-		for instrument in ["piano", "violin", "guitar", "bass"]:
-			listbox.insert(END, instrument)		
 		listbox.grid(row=0,column=1,padx=20, pady=20)
+		for instrument in INSTRUMENTS:
+			listbox.insert(END, instrument)	
+
+		idx = 0
+		for instrument in INSTRUMENTS:
+			if instrument in self.config_file.instruments:
+				listbox.select_set(idx)
+
+			idx += 1	
 		
 		Label(settingsWindow, text="Amplitude range:").grid(row=1, column=0,padx=20, pady=20)
+		f1 = Frame(settingsWindow)
+		Label(f1, text="Min=").grid(row=0, column=0,padx=5, pady=5)
+		amp_min = Entry(f1, width=5)
+		entry_set_text(amp_min, self.config_file.amp_range[0])
+		amp_min.grid(row=0, column=1,padx=5, pady=5)
+		Label(f1, text="Max=").grid(row=0, column=2,padx=5, pady=5)
+		amp_max=Entry(f1, width=5)
+		entry_set_text(amp_max, self.config_file.amp_range[1])
+		amp_max.grid(row=0, column=3,padx=5, pady=5)
+		f1.grid(row=1,column=1)
+
 		Label(settingsWindow, text="Degree range:").grid(row=2, column=0,padx=20, pady=20)
-		Label(settingsWindow, text="Duration range:").grid(row=2, column=0,padx=20, pady=20)
-		Label(settingsWindow, text="Duration neighbours radius:").grid(row=3, column=0,padx=20, pady=20)
-		Button(settingsWindow, text="Save").grid(row=4, columnspan=2,padx=20, pady=20)
+		f2 = Frame(settingsWindow)
+		Label(f2, text="Min=").grid(row=0, column=0,padx=5, pady=5)
+		deg_min = Entry(f2, width=5)
+		entry_set_text(deg_min, self.config_file.deg_range[0])
+		deg_min.grid(row=0, column=1,padx=5, pady=5)
+		Label(f2, text="Max=").grid(row=0, column=2,padx=5, pady=5)
+		deg_max=Entry(f2, width=5)
+		entry_set_text(deg_max, self.config_file.deg_range[1])
+		deg_max.grid(row=0, column=3,padx=5, pady=5)
+		f2.grid(row=2,column=1)
+
+		Label(settingsWindow, text="Duration range:").grid(row=3, column=0,padx=20, pady=20)		
+		f3 = Frame(settingsWindow)
+		Label(f3, text="Min=").grid(row=0, column=0,padx=5, pady=5)
+		dur_min = Entry(f3, width=5)
+		entry_set_text(dur_min, self.config_file.dur_range[0])
+		dur_min.grid(row=0, column=1,padx=5, pady=5)
+		Label(f3, text="Max=").grid(row=0, column=2,padx=5, pady=5)
+		dur_max=Entry(f3, width=5)
+		entry_set_text(dur_max, self.config_file.dur_range[1])
+		dur_max.grid(row=0, column=3,padx=5, pady=5)
+		f3.grid(row=3,column=1)
+
+		Label(settingsWindow, text="Duration neighbours radius:").grid(row=4, column=0, padx=20, pady=20)
+		dur_neigh_scale = Scale(settingsWindow, from_=1, to=50, orient=HORIZONTAL)
+		dur_neigh_scale.set(self.config_file.dur_neigh_scale)
+		dur_neigh_scale.grid(row=4,column=1, padx=20, pady=20)
+
+		def validate(instruments, amp_min,amp_max,deg_min,deg_max,dur_min,dur_max,dur_neigh_scale):
+			return "not impl."
+
+		def save_btn(conf_file, window, instruments, amp_min,amp_max,deg_min,deg_max,dur_min,dur_max,dur_neigh_scale):
+			validation = validate(instruments, amp_min,amp_max,deg_min,deg_max,dur_min,dur_max,dur_neigh_scale)
+			if validation:
+				showerror("Error", validation)
+			else:
+				window.destroy()	
+				conf_file.set_values(instruments, amp_min,amp_max,deg_min,deg_max,dur_min,dur_max,dur_neigh_scale)
+				conf_file.save()
+
+		Button(settingsWindow, text="Save", command=lambda: save_btn(self.config_file, settingsWindow,[listbox.get(idx) for idx in listbox.curselection()], amp_min.get(),amp_max.get(),deg_min.get(),deg_max.get(),dur_min.get(),dur_max.get(),dur_neigh_scale.get())).grid(row=5, columnspan=2,padx=20, pady=20)
 		
 		settingsWindow.title("Settings")
 		settingsWindow.mainloop()
@@ -107,9 +204,10 @@ class App(Tk):
 		aboutWindow.mainloop()
 
 	def makesound(self, r, g, b):
-		degree = int(self.get_value(DEGREE_RANGE, r))
-		duration = self.get_value(DURATION_RANGE, g)
-		amp = self.get_value(AMP_RANGE, b)
+		# TODO: implement duration neighbours and different instruments
+		degree = int(self.get_value(self.config_file.deg_range, r))
+		duration = self.get_value(self.config_file.dur_range, g)
+		amp = self.get_value(self.config_file.amp_range, b)
 
 		client = OSC.OSCClient()
 		client.connect(('127.0.0.1', 57120))
