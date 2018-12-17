@@ -110,7 +110,7 @@ class App(Tk):
 		menubar.add_cascade(label="Help", menu=helpmenu)
 		self.config(menu=menubar)
 		
-		d=StatusBar(self)
+		#d=StatusBar(self)
 
 		self.config_file = ConfigFile.load()
 		print "config file was loaded:"
@@ -142,7 +142,8 @@ class App(Tk):
 		if imagePath:
 			self.img = Image.open(imagePath)
 			self.imgTk = ImageTk.PhotoImage(self.img)
-			
+
+			# TODO: show border for image
 			self.imageLabel = Label(self, image = self.imgTk)
 			self.imageLabel.pack(side = "bottom", fill = "both", expand = "yes")
 			self.bind('<Button-1>', self.click)
@@ -342,7 +343,7 @@ class App(Tk):
 		client.send(msg)
 
 	def makesound(self, songItem):
-		self.send_msg_to_server( [songItem], "")
+		self.send_msg_to_server( [songItem])
 
 def main():
 	app = App()
