@@ -4,7 +4,7 @@ p0
 (dp1
 S'amp_avg'
 p2
-I00
+I01
 sS'deg_avg'
 p3
 I01

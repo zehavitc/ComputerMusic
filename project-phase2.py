@@ -1,7 +1,6 @@
 
 # TODO: load multiple images
 # TODO: let the user choose the role for every coordinate in (r,g,b)
-# TODO: status bar?
 
 from Tkinter import *
 from tkMessageBox import *
@@ -17,6 +16,8 @@ SETTINGS_FILENAME = 'settings.pkl'
 SERVER_IP='127.0.0.1'
 SERVER_PORT=57120
 SERVER_MSG_ADDRESS="/makesound"
+MAX_IMAGE_SIZE=650
+IMAGE_LABEL_BORDER_WIDTH=0
 
 # helper func
 def entry_set_text(entry, text):
@@ -76,24 +77,33 @@ class StatusBar(Frame):
         self.pack()
 
 class App(Tk):
-	def __init__(self):
-		Tk.__init__(self)
-		self.title("RGB Music")
-		self.song = []
-		w = 500
-		h = 400
+	def __geom__(self):
+		self.update()
+		w = self.winfo_width()
+		h = self.winfo_height()
 		ws = self.winfo_screenwidth()
 		hs = self.winfo_screenheight()
 		x = (ws/2) - (w/2)
 		y = (hs/2) - (h/2)
-		self.geometry('%dx%d+%d+%d' % (w,h,x, y))
+		self.geometry('+%d+%d' % (x, y))
+
+	def __init__(self):
+		Tk.__init__(self)
+		self.title("RGB Music")
+		self.song = []
 		
 		self.iconbitmap(default='icon.ico')
 		self.resizable(width=False, height=False)
 		self.img = None
-		self.imgTk = None		
+		self.imgTk = None	
 		
-		menubar = Menu(self)
+		self.mainFrame = Frame(self)
+
+		self.imageLabel = Label(self.mainFrame, text="")
+		self.imageLabel.config(height=20, width=50)
+		self.imageLabel.pack()
+
+		menubar = Menu(self.mainFrame)
 		filemenu = Menu(menubar, tearoff=0)
 		filemenu.add_command(label="Load image", command=self.load_image)
 		filemenu.add_command(label="Settings", command=self.settings)
@@ -115,6 +125,9 @@ class App(Tk):
 		self.config_file = ConfigFile.load()
 		print "config file was loaded:"
 		print self.config_file
+
+		self.mainFrame.pack()
+		self.__geom__()
 
 	def reset(self):
 		self.song = []
@@ -141,12 +154,23 @@ class App(Tk):
 		imagePath = tkFileDialog.askopenfilename(initialdir = ".",title = "Select image file",filetypes = ftypes)
 		if imagePath:
 			self.img = Image.open(imagePath)
+			width, height = self.img.size
+
+			if width > MAX_IMAGE_SIZE or height > MAX_IMAGE_SIZE:
+				showerror("Error", "Cannot load image with height or width greater than %d" % MAX_IMAGE_SIZE)
+				self.img = None
+				return
+
 			self.imgTk = ImageTk.PhotoImage(self.img)
 
-			# TODO: show border for image
-			self.imageLabel = Label(self, image = self.imgTk)
-			self.imageLabel.pack(side = "bottom", fill = "both", expand = "yes")
-			self.bind('<Button-1>', self.click)
+			if self.imageLabel:
+				self.imageLabel.destroy()
+
+			self.imageLabel = Label(self.mainFrame, image = self.imgTk, borderwidth=IMAGE_LABEL_BORDER_WIDTH, relief = 'solid')
+			self.imageLabel.pack()
+			self.imageLabel.bind('<Button-1>', self.click)
+			self.mainFrame.pack()
+			self.__geom__()
 			
 	def createSongItemFromRGB(self, degree, duration, amplitude):
 		return SongItem(instruments = self.config_file.instruments, deg = degree, dur = duration, amp = amplitude)
@@ -191,6 +215,7 @@ class App(Tk):
 
 	def click(self, event):
 		x, y = event.x, event.y
+
 		print('The user clicked on {}, {}'.format(x, y))
 		rgb = self.img.getpixel((x,y))[:3]
 		print("rgb="+str(rgb))
