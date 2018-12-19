@@ -87,6 +87,14 @@ class App(Tk):
 		y = (hs/2) - (h/2)
 		self.geometry('+%d+%d' % (x, y))
 
+	def nextImage(self):
+		self.currentImg+=1
+		self.setImageLabel()
+
+	def prevImage(self):
+		self.currentImg-=1
+		self.setImageLabel()
+
 	def __init__(self):
 		Tk.__init__(self)
 		self.title("RGB Music")
@@ -94,10 +102,17 @@ class App(Tk):
 		
 		self.iconbitmap(default='icon.ico')
 		self.resizable(width=False, height=False)
-		self.img = None
-		self.imgTk = None	
-		
+		self.imgs = []
+		self.currentImg = 0
+
 		self.mainFrame = Frame(self)
+
+		self.btnNext = Button(self.mainFrame, text="Next Image ->", command=self.nextImage)
+		self.btnNext.pack()
+		self.btnPrev = Button(self.mainFrame, text="<- Prev Image", command=self.prevImage)
+		self.btnPrev.pack()	
+		self.btnPrev.config(state='disabled')
+		self.btnNext.config(state='disabled')
 
 		self.imageLabel = Label(self.mainFrame, text="")
 		self.imageLabel.config(height=20, width=50)
@@ -105,7 +120,7 @@ class App(Tk):
 
 		menubar = Menu(self.mainFrame)
 		filemenu = Menu(menubar, tearoff=0)
-		filemenu.add_command(label="Load image", command=self.load_image)
+		filemenu.add_command(label="Load images", command=self.load_images)
 		filemenu.add_command(label="Settings", command=self.settings)
 		filemenu.add_separator()
 		filemenu.add_command(label="Exit", command=self.quit)
@@ -149,29 +164,49 @@ class App(Tk):
 		if path_to_save:
 			self.send_msg_to_server(self.song, path_to_save)
 
-	def load_image(self):
+	def load_images(self):
 		ftypes = [('Image files', '*.png;*.jpg;*.jpeg')]
-		imagePath = tkFileDialog.askopenfilename(initialdir = ".",title = "Select image file",filetypes = ftypes)
-		if imagePath:
-			self.img = Image.open(imagePath)
-			width, height = self.img.size
-
-			if width > MAX_IMAGE_SIZE or height > MAX_IMAGE_SIZE:
-				showerror("Error", "Cannot load image with height or width greater than %d" % MAX_IMAGE_SIZE)
-				self.img = None
-				return
-
-			self.imgTk = ImageTk.PhotoImage(self.img)
-
+		imagePaths = tkFileDialog.askopenfilenames(initialdir = ".",title = "Select image file",filetypes = ftypes)
+		if imagePaths:
 			if self.imageLabel:
 				self.imageLabel.destroy()
 
-			self.imageLabel = Label(self.mainFrame, image = self.imgTk, borderwidth=IMAGE_LABEL_BORDER_WIDTH, relief = 'solid')
-			self.imageLabel.pack()
-			self.imageLabel.bind('<Button-1>', self.click)
-			self.mainFrame.pack()
-			self.__geom__()
+			for imagePath in imagePaths:
+				img = Image.open(imagePath)
+				imgTk = ImageTk.PhotoImage(img)
+
+				width, height = img.size
+
+				if width > MAX_IMAGE_SIZE or height > MAX_IMAGE_SIZE:
+					showerror("Error", "Cannot load image '%s' with height or width greater than %d" % (imagePath,MAX_IMAGE_SIZE))
+				else:
+					self.imgs.append((img,imgTk))
+
+			self.currentImg = 0
+			self.setImageLabel()
+
+	def updateButtons(self):
+		if self.currentImg == 0:
+			self.btnPrev.config(state='disabled')
+		else:
+			self.btnPrev.config(state='normal')
+
+		if self.currentImg == len(self.imgs)-1:
+			self.btnNext.config(state='disabled')
+		else:
+			self.btnNext.config(state='normal')
 			
+	def setImageLabel(self):	
+		if self.imageLabel:
+			self.imageLabel.destroy()
+
+		self.updateButtons()
+		self.imageLabel = Label(self.mainFrame, image = self.imgs[self.currentImg][1], borderwidth=IMAGE_LABEL_BORDER_WIDTH, relief = 'solid')
+		self.imageLabel.pack()
+		self.imageLabel.bind('<Button-1>', self.click)
+		self.mainFrame.pack()
+		self.__geom__()
+
 	def createSongItemFromRGB(self, degree, duration, amplitude):
 		return SongItem(instruments = self.config_file.instruments, deg = degree, dur = duration, amp = amplitude)
 
@@ -198,7 +233,7 @@ class App(Tk):
 			return sum
 
 		(r,g,b) = rgb
-		(ar,ag,ab) = calc_avg_rgb(self.img, point, self.config_file.neigh_scale)
+		(ar,ag,ab) = calc_avg_rgb(self.imgs[self.currentImg][0], point, self.config_file.neigh_scale)
 
 		if self.config_file.deg_avg:
 			r = ar
@@ -217,7 +252,7 @@ class App(Tk):
 		x, y = event.x, event.y
 
 		print('The user clicked on {}, {}'.format(x, y))
-		rgb = self.img.getpixel((x,y))[:3]
+		rgb = self.imgs[self.currentImg][0].getpixel((x,y))[:3]
 		print("rgb="+str(rgb))
 		params = self.calculate_params(rgb, (x,y))
 		item = self.createSongItemFromRGB(*params)
