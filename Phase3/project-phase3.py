@@ -1,5 +1,3 @@
-
-# TODO: load multiple images
 # TODO: let the user choose the role for every coordinate in (r,g,b)
 
 from Tkinter import *
