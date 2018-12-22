@@ -150,7 +150,9 @@ class App(Tk):
 		
 		path_to_save = tkFileDialog.asksaveasfilename(initialdir = ".",title = "Export to file",filetypes = [("aiff files","*.aiff")])
 		if path_to_save:
-			self.send_make_sound_to_server(self.song, path_to_save + ".aiff")
+			if (not path_to_save.endswith(".aiff")):
+				path_to_save += ".aiff"
+			self.send_make_sound_to_server(self.song, path_to_save)
 
 	def load_image(self):
 		ftypes = [('Image files', '*.png;*.jpg;*.jpeg')]
@@ -397,7 +399,7 @@ class App(Tk):
 			msg.append(songItem.amp)
 
 		client.send(msg)
-		time.sleep(totalDuration)
+		time.sleep(totalDuration + 1)
 		self.send_stop_recording_command_to_server(path_to_save)
 
 	def makesound(self, songItem):
