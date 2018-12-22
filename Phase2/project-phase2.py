@@ -181,8 +181,8 @@ class App(Tk):
 		return SongItem(instrument = instrument, deg = degree, dur = duration, amp = amplitude)
 
 	def calculate_params(self, rgb, point):
-		def get_value(range, num):
-			return float(range[0]) + ((num / 255.0) * (float(range[1])-float(range[0])))
+		def get_value(range, num, whole):
+			return float(range[0]) + ((num / float(whole)) * (float(range[1])-float(range[0])))
 
 		def calc_avg_rgb(img, point, radius):
 			(x,y) = point
@@ -212,10 +212,10 @@ class App(Tk):
 		if self.config_file.amp_avg:
 			b = ab
 
-		degree = int(get_value(self.config_file.deg_range, r))
-		duration = get_value(self.config_file.dur_range, g)
-		amplitude = get_value(self.config_file.amp_range, b)
-		instrument = self.config_file.instruments[int(get_value(range(len(self.config_file.instruments)), r+g+b))]
+		degree = int(get_value(self.config_file.deg_range, r, 255))
+		duration = get_value(self.config_file.dur_range, g, 255)
+		amplitude = get_value(self.config_file.amp_range, b, 255)
+		instrument = self.config_file.instruments[int(get_value(range(len(self.config_file.instruments)), r+g+b, 255*3))]
 		return instrument, degree, duration, amplitude
 
 	def click(self, event):
