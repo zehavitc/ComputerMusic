@@ -390,7 +390,7 @@ class App(Tk):
 		#itemsToSend = [list(item) for item in items]
 		msg.append(len(songItems))
 		msg.append(path_to_save)
-		totalDuration = 0;
+		totalDuration = 0
 		for songItem in songItems:
 			msg.append(songItem.instrument)
 			msg.append(songItem.deg)
