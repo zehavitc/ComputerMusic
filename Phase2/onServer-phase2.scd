@@ -1,4 +1,4 @@
-
+(
 // SYNTHS
 SynthDef("violin", {arg out=0, freq=523.25, amp=1, lpf = 1537, gate=1, pan=0.3;
 
@@ -87,3 +87,4 @@ OSCFunc( { | msg, time, addr, port |
 	( "path is " + path).postln;
 	if (path != "", {s.stopRecording;}, {( "path is empty").postln});
 }, '/stopRecording' ));
+)
