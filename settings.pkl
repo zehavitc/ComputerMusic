@@ -16,7 +16,7 @@ p5
 (lp6
 S'piano'
 p7
-aS'guitar'
+aS'violin'
 p8
 aS'bass'
 p9

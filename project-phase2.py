@@ -11,24 +11,28 @@ import OSC
 import pickle
 import os
 from collections import namedtuple
+import time
 
-INSTRUMENTS = ["piano", "violin", "guitar", "bass"]
+INSTRUMENTS = ["piano", "violin", "bass"]
 SETTINGS_FILENAME = 'settings.pkl'
 SERVER_IP='127.0.0.1'
 SERVER_PORT=57120
 SERVER_MSG_ADDRESS="/makesound"
+SERVER_MSG_START_RECORDING="/startRecording"
+SERVER_MSG_STOP_RECORDING="/stopRecording"
+
 
 # helper func
 def entry_set_text(entry, text):
     entry.delete(0,END)
     entry.insert(0,text)
 
-SongItem = namedtuple('SongItem', ['instruments', 'deg', 'amp', 'dur'])
+SongItem = namedtuple('SongItem', ['instrument', 'deg', 'amp', 'dur'])
 
 class ConfigFile():
 	def __init__(self):
 		# default values
-		self.instruments = ["piano"]
+		self.instruments = INSTRUMENTS
 		self.amp_range = (0.4, 3)
 		self.amp_avg = False
 		self.dur_range = (0.2, 0.8)
@@ -125,7 +129,7 @@ class App(Tk):
 			showerror("Error", "Song is empty")
 			return
 
-		self.send_msg_to_server(self.song)
+		self.send_make_sound_to_server(self.song)
 
 	def export(self):
 		if not self.song:
@@ -134,7 +138,7 @@ class App(Tk):
 		
 		path_to_save = tkFileDialog.asksaveasfilename(initialdir = ".",title = "Export to file",filetypes = [("aiff files","*.aiff")])
 		if path_to_save:
-			self.send_msg_to_server(self.song, path_to_save)
+			self.send_make_sound_to_server(self.song, path_to_save + ".aiff")
 
 	def load_image(self):
 		ftypes = [('Image files', '*.png;*.jpg;*.jpeg')]
@@ -148,8 +152,8 @@ class App(Tk):
 			self.imageLabel.pack(side = "bottom", fill = "both", expand = "yes")
 			self.bind('<Button-1>', self.click)
 			
-	def createSongItemFromRGB(self, degree, duration, amplitude):
-		return SongItem(instruments = self.config_file.instruments, deg = degree, dur = duration, amp = amplitude)
+	def createSongItemFromRGB(self, instrument, degree, duration, amplitude):
+		return SongItem(instrument = instrument, deg = degree, dur = duration, amp = amplitude)
 
 	def calculate_params(self, rgb, point):
 		def get_value(range, num):
@@ -186,8 +190,8 @@ class App(Tk):
 		degree = int(get_value(self.config_file.deg_range, r))
 		duration = get_value(self.config_file.dur_range, g)
 		amplitude = get_value(self.config_file.amp_range, b)
-
-		return degree, duration, amplitude
+		instrument = self.config_file.instruments[int(get_value(range(len(self.config_file.instruments)), r+g+b))]
+		return instrument, degree, duration, amplitude
 
 	def click(self, event):
 		x, y = event.x, event.y
@@ -333,17 +337,47 @@ class App(Tk):
 		aboutWindow.title("About RGB Music")
 		aboutWindow.mainloop()
 
-	def send_msg_to_server(self, items, path_to_save = ""):
+	def send_start_recording_command_to_server(self, path_to_save):
+		client = OSC.OSCClient()
+		client.connect((SERVER_IP, SERVER_PORT))
+		msg = OSC.OSCMessage()
+		msg.setAddress(SERVER_MSG_START_RECORDING)
+		msg.append(path_to_save)
+		client.send(msg)
+
+
+	def send_stop_recording_command_to_server(self, path_to_save):
+		client = OSC.OSCClient()
+		client.connect((SERVER_IP, SERVER_PORT))
+		msg = OSC.OSCMessage()
+		msg.setAddress(SERVER_MSG_STOP_RECORDING)
+		msg.append(path_to_save)
+		client.send(msg)
+
+	def send_make_sound_to_server(self, songItems, path_to_save =""):
+		path_to_save = '/'.join(path_to_save.split('\\'))
+		self.send_start_recording_command_to_server(path_to_save)
 		client = OSC.OSCClient()
 		client.connect((SERVER_IP, SERVER_PORT))
 		msg = OSC.OSCMessage()
 		msg.setAddress(SERVER_MSG_ADDRESS)
-		msg.append(items)
+		#itemsToSend = [list(item) for item in items]
+		msg.append(len(songItems))
 		msg.append(path_to_save)
+		totalDuration = 0;
+		for songItem in songItems:
+			msg.append(songItem.instrument)
+			msg.append(songItem.deg)
+			totalDuration+=songItem.dur
+			msg.append(songItem.dur)
+			msg.append(songItem.amp)
+
 		client.send(msg)
+		time.sleep(totalDuration)
+		self.send_stop_recording_command_to_server(path_to_save)
 
 	def makesound(self, songItem):
-		self.send_msg_to_server( [songItem])
+		self.send_make_sound_to_server([songItem])
 
 def main():
 	app = App()
