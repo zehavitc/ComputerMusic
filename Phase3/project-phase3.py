@@ -1,7 +1,4 @@
-
-# TODO: load multiple images
 # TODO: let the user choose the role for every coordinate in (r,g,b)
-# TODO: status bar?
 
 from Tkinter import *
 from tkMessageBox import *
@@ -11,28 +8,26 @@ import OSC
 import pickle
 import os
 from collections import namedtuple
-import time
 
-INSTRUMENTS = ["piano", "violin", "bass"]
+INSTRUMENTS = ["piano", "violin", "guitar", "bass"]
 SETTINGS_FILENAME = 'settings.pkl'
 SERVER_IP='127.0.0.1'
 SERVER_PORT=57120
 SERVER_MSG_ADDRESS="/makesound"
-SERVER_MSG_START_RECORDING="/startRecording"
-SERVER_MSG_STOP_RECORDING="/stopRecording"
-
+MAX_IMAGE_SIZE=650
+IMAGE_LABEL_BORDER_WIDTH=0
 
 # helper func
 def entry_set_text(entry, text):
     entry.delete(0,END)
     entry.insert(0,text)
 
-SongItem = namedtuple('SongItem', ['instrument', 'deg', 'amp', 'dur'])
+SongItem = namedtuple('SongItem', ['instruments', 'deg', 'amp', 'dur'])
 
 class ConfigFile():
 	def __init__(self):
 		# default values
-		self.instruments = INSTRUMENTS
+		self.instruments = ["piano"]
 		self.amp_range = (0.4, 3)
 		self.amp_avg = False
 		self.dur_range = (0.2, 0.8)
@@ -80,26 +75,50 @@ class StatusBar(Frame):
         self.pack()
 
 class App(Tk):
-	def __init__(self):
-		Tk.__init__(self)
-		self.title("RGB Music")
-		self.song = []
-		w = 500
-		h = 400
+	def __geom__(self):
+		self.update()
+		w = self.winfo_width()
+		h = self.winfo_height()
 		ws = self.winfo_screenwidth()
 		hs = self.winfo_screenheight()
 		x = (ws/2) - (w/2)
 		y = (hs/2) - (h/2)
-		self.geometry('%dx%d+%d+%d' % (w,h,x, y))
+		self.geometry('+%d+%d' % (x, y))
+
+	def nextImage(self):
+		self.currentImg+=1
+		self.setImageLabel()
+
+	def prevImage(self):
+		self.currentImg-=1
+		self.setImageLabel()
+
+	def __init__(self):
+		Tk.__init__(self)
+		self.title("RGB Music")
+		self.song = []
 		
 		self.iconbitmap(default='icon.ico')
 		self.resizable(width=False, height=False)
-		self.img = None
-		self.imgTk = None		
-		
-		menubar = Menu(self)
+		self.imgs = []
+		self.currentImg = 0
+
+		self.mainFrame = Frame(self)
+
+		self.btnNext = Button(self.mainFrame, text="Next Image ->", command=self.nextImage)
+		self.btnNext.pack()
+		self.btnPrev = Button(self.mainFrame, text="<- Prev Image", command=self.prevImage)
+		self.btnPrev.pack()	
+		self.btnPrev.config(state='disabled')
+		self.btnNext.config(state='disabled')
+
+		self.imageLabel = Label(self.mainFrame, text="")
+		self.imageLabel.config(height=20, width=50)
+		self.imageLabel.pack()
+
+		menubar = Menu(self.mainFrame)
 		filemenu = Menu(menubar, tearoff=0)
-		filemenu.add_command(label="Load image", command=self.load_image)
+		filemenu.add_command(label="Load images", command=self.load_images)
 		filemenu.add_command(label="Settings", command=self.settings)
 		filemenu.add_separator()
 		filemenu.add_command(label="Exit", command=self.quit)
@@ -120,6 +139,9 @@ class App(Tk):
 		print "config file was loaded:"
 		print self.config_file
 
+		self.mainFrame.pack()
+		self.__geom__()
+
 	def reset(self):
 		self.song = []
 		showinfo("Success", "Song was reset successfuly")
@@ -129,7 +151,7 @@ class App(Tk):
 			showerror("Error", "Song is empty")
 			return
 
-		self.send_make_sound_to_server(self.song)
+		self.send_msg_to_server(self.song)
 
 	def export(self):
 		if not self.song:
@@ -138,22 +160,53 @@ class App(Tk):
 		
 		path_to_save = tkFileDialog.asksaveasfilename(initialdir = ".",title = "Export to file",filetypes = [("aiff files","*.aiff")])
 		if path_to_save:
-			self.send_make_sound_to_server(self.song, path_to_save + ".aiff")
+			self.send_msg_to_server(self.song, path_to_save)
 
-	def load_image(self):
+	def load_images(self):
 		ftypes = [('Image files', '*.png;*.jpg;*.jpeg')]
-		imagePath = tkFileDialog.askopenfilename(initialdir = ".",title = "Select image file",filetypes = ftypes)
-		if imagePath:
-			self.img = Image.open(imagePath)
-			self.imgTk = ImageTk.PhotoImage(self.img)
+		imagePaths = tkFileDialog.askopenfilenames(initialdir = ".",title = "Select image file",filetypes = ftypes)
+		if imagePaths:
+			if self.imageLabel:
+				self.imageLabel.destroy()
 
-			# TODO: show border for image
-			self.imageLabel = Label(self, image = self.imgTk)
-			self.imageLabel.pack(side = "bottom", fill = "both", expand = "yes")
-			self.bind('<Button-1>', self.click)
+			for imagePath in imagePaths:
+				img = Image.open(imagePath)
+				imgTk = ImageTk.PhotoImage(img)
+
+				width, height = img.size
+
+				if width > MAX_IMAGE_SIZE or height > MAX_IMAGE_SIZE:
+					showerror("Error", "Cannot load image '%s' with height or width greater than %d" % (imagePath,MAX_IMAGE_SIZE))
+				else:
+					self.imgs.append((img,imgTk))
+
+			self.currentImg = 0
+			self.setImageLabel()
+
+	def updateButtons(self):
+		if self.currentImg == 0:
+			self.btnPrev.config(state='disabled')
+		else:
+			self.btnPrev.config(state='normal')
+
+		if self.currentImg == len(self.imgs)-1:
+			self.btnNext.config(state='disabled')
+		else:
+			self.btnNext.config(state='normal')
 			
-	def createSongItemFromRGB(self, instrument, degree, duration, amplitude):
-		return SongItem(instrument = instrument, deg = degree, dur = duration, amp = amplitude)
+	def setImageLabel(self):	
+		if self.imageLabel:
+			self.imageLabel.destroy()
+
+		self.updateButtons()
+		self.imageLabel = Label(self.mainFrame, image = self.imgs[self.currentImg][1], borderwidth=IMAGE_LABEL_BORDER_WIDTH, relief = 'solid')
+		self.imageLabel.pack()
+		self.imageLabel.bind('<Button-1>', self.click)
+		self.mainFrame.pack()
+		self.__geom__()
+
+	def createSongItemFromRGB(self, degree, duration, amplitude):
+		return SongItem(instruments = self.config_file.instruments, deg = degree, dur = duration, amp = amplitude)
 
 	def calculate_params(self, rgb, point):
 		def get_value(range, num):
@@ -178,7 +231,7 @@ class App(Tk):
 			return sum
 
 		(r,g,b) = rgb
-		(ar,ag,ab) = calc_avg_rgb(self.img, point, self.config_file.neigh_scale)
+		(ar,ag,ab) = calc_avg_rgb(self.imgs[self.currentImg][0], point, self.config_file.neigh_scale)
 
 		if self.config_file.deg_avg:
 			r = ar
@@ -190,13 +243,14 @@ class App(Tk):
 		degree = int(get_value(self.config_file.deg_range, r))
 		duration = get_value(self.config_file.dur_range, g)
 		amplitude = get_value(self.config_file.amp_range, b)
-		instrument = self.config_file.instruments[int(get_value(range(len(self.config_file.instruments)), r+g+b))]
-		return instrument, degree, duration, amplitude
+
+		return degree, duration, amplitude
 
 	def click(self, event):
 		x, y = event.x, event.y
+
 		print('The user clicked on {}, {}'.format(x, y))
-		rgb = self.img.getpixel((x,y))[:3]
+		rgb = self.imgs[self.currentImg][0].getpixel((x,y))[:3]
 		print("rgb="+str(rgb))
 		params = self.calculate_params(rgb, (x,y))
 		item = self.createSongItemFromRGB(*params)
@@ -337,47 +391,17 @@ class App(Tk):
 		aboutWindow.title("About RGB Music")
 		aboutWindow.mainloop()
 
-	def send_start_recording_command_to_server(self, path_to_save):
-		client = OSC.OSCClient()
-		client.connect((SERVER_IP, SERVER_PORT))
-		msg = OSC.OSCMessage()
-		msg.setAddress(SERVER_MSG_START_RECORDING)
-		msg.append(path_to_save)
-		client.send(msg)
-
-
-	def send_stop_recording_command_to_server(self, path_to_save):
-		client = OSC.OSCClient()
-		client.connect((SERVER_IP, SERVER_PORT))
-		msg = OSC.OSCMessage()
-		msg.setAddress(SERVER_MSG_STOP_RECORDING)
-		msg.append(path_to_save)
-		client.send(msg)
-
-	def send_make_sound_to_server(self, songItems, path_to_save =""):
-		path_to_save = '/'.join(path_to_save.split('\\'))
-		self.send_start_recording_command_to_server(path_to_save)
+	def send_msg_to_server(self, items, path_to_save = ""):
 		client = OSC.OSCClient()
 		client.connect((SERVER_IP, SERVER_PORT))
 		msg = OSC.OSCMessage()
 		msg.setAddress(SERVER_MSG_ADDRESS)
-		#itemsToSend = [list(item) for item in items]
-		msg.append(len(songItems))
+		msg.append(items)
 		msg.append(path_to_save)
-		totalDuration = 0;
-		for songItem in songItems:
-			msg.append(songItem.instrument)
-			msg.append(songItem.deg)
-			totalDuration+=songItem.dur
-			msg.append(songItem.dur)
-			msg.append(songItem.amp)
-
 		client.send(msg)
-		time.sleep(totalDuration)
-		self.send_stop_recording_command_to_server(path_to_save)
 
 	def makesound(self, songItem):
-		self.send_make_sound_to_server([songItem])
+		self.send_msg_to_server( [songItem])
 
 def main():
 	app = App()
